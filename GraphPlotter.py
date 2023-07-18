@@ -1,6 +1,8 @@
 import re as re
 import sys
 import warnings
+
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QApplication, QVBoxLayout, QPushButton, QLineEdit, QLabel, QMessageBox, QWidget, \
     QHBoxLayout, QGroupBox
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -10,8 +12,11 @@ from sympy import symbols, lambdify
 
 
 class MainApp(QWidget):
+
     def __init__(self):
         QWidget.__init__(self)
+        self.message_box_shown = Signal(str)
+
         self.layout = QVBoxLayout(self)
 
         # create a label and input for the equation
@@ -91,11 +96,12 @@ class MainApp(QWidget):
         equationFunction = self.equationInput.text()
         # check if the equation is empty
         if equationFunction == '':
-            QMessageBox.warning(self, 'Input Error', 'Please enter the equation.')
+            message = 'Please enter the equation.'
+            QMessageBox.warning(self, 'Input Error', message)
             return
 
         # check if the equation is valid
-        validateMessage = self.validateExpression()
+        validateMessage = self.validateExpression(equationFunction)
         if validateMessage != 'Correct Equation':
             QMessageBox.warning(self, 'Input Error', validateMessage)
             return
@@ -137,9 +143,9 @@ class MainApp(QWidget):
             QMessageBox.warning(self, 'Input Error', 'The entered function is not valid.')
             return
 
-    def validateExpression(self):
+    def validateExpression(self , expression):
         # Get the expression from the input
-        expression = self.equationInput.text()
+
 
         # convert the expression to lower case
         expression = expression.lower()
@@ -148,6 +154,7 @@ class MainApp(QWidget):
         validCharacters = set('0123456789.x^+-/*() ')
         operators = set('^+-/*')
         nonBeginningOperators = set('^*/')
+        repeatableOperators = set('+-')
 
         # Initialize counters for parentheses and dots
         openParentheses = 0
@@ -163,12 +170,15 @@ class MainApp(QWidget):
 
         # check if the expression is having at least one x
         if expression.count('x') == 0:
-            return 'The Equation Must have at least one x'
+            return 'The Equation must have at least one x'
 
         # check if there is 2 numbers with spaces between them in the expression
         spacesBetweenNumberPattern = r"\d+\s+\d+"
         if re.search(spacesBetweenNumberPattern, expression):
             return 'The Equation cannot have spaces between numbers'
+        invalidFollowingOperators = r"([*/^])([+-^])+([*/^])"
+        if re.search(invalidFollowingOperators, expression):
+            return 'The Equation cannot have 2 or more consecutive operators'
 
         # remove all spaces from the expression
         expression = expression.replace(' ', '')
@@ -181,15 +191,15 @@ class MainApp(QWidget):
                 return 'There are invalid characters in the equation'
 
             # Check for consecutive operators
-            if 0 < i and char in operators and expression[i - 1] in operators:
-                return 'The Equation cannot have 2 consecutive operators'
+            if 0 < i and char in nonBeginningOperators and expression[i - 1] in nonBeginningOperators:
+                return 'The Equation cannot have 2 or more consecutive operators'
 
             # Check for consecutive Xs
             if 0 < i and char == 'x' and expression[i - 1] == 'x':
                 return 'The Equation cannot have 2 or more consecutive Xs'
 
             # Check for x being part of a number or x with dot or opening parentheses
-            if i > 0 and ((char == 'x' and (expression[i - 1].isdigit() or expression[i - 1] == '.')) or
+            if i > 0 and ((char == 'x' and (expression[i - 1].isdigit() or expression[i - 1] == '.' or expression[i-1] == ')')) or
                           (char.isdigit() and expression[i - 1] == 'x') or
                           ((char == '.' or char == '(') and expression[i - 1] == 'x')):
                 return 'x cannot be concatenated with something'
@@ -208,9 +218,9 @@ class MainApp(QWidget):
                         return 'Opening Parentheses cannot be followed by one of these characters "^" or "*" or "/"'
             elif char == ')':
                 if openParentheses == 0:
-                    return 'Parentheses are invalid'
+                    return 'Parentheses are not balanced'
                 openParentheses -= 1
-                if i + 1 < len(expression) and expression[i + 1].isdigit():
+                if i + 1 < len(expression) and (expression[i + 1].isdigit()):
                     return 'Closing Parentheses cannot have number after it'
                 if i > 0:
                     if expression[i - 1] in operators:
@@ -228,12 +238,16 @@ class MainApp(QWidget):
                 continue
             else:
                 if dotCount > 1:
-                    return 'float number cannot contain more than one float number'
+                    return 'float number cannot contain more than one dot'
                 dotCount = 0
 
         # Check for unbalanced parentheses
         if openParentheses != 0:
-            return 'Parentheses are invalid'
+            return 'Parentheses are not balanced'
+
+        # Check for consecutive dots
+        if dotCount > 1:
+            return 'float number cannot contain more than one dot'
 
         return 'Correct Equation'
 
