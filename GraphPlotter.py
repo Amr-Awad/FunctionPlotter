@@ -256,6 +256,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     widget = MainApp()
+    widget.setWindowTitle('Function Plotter')
     widget.resize(800, 600)
     widget.show()
 
